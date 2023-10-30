@@ -1,37 +1,43 @@
-import smbus
+import RPi.GPIO as GPIO
 import time
 
-I2C_ADDRESS = 0x23
-CONTROL_REGISTER = 0x00
-DATA_REGISTER = 0x0C
+GPIO.setwarnings(False)
 
-bus = smbus.SMBus(1)
+TRIG_PIN = 21
+ECHO_PIN = 20
+LED_PIN = 4
 
-bus.write_byte_data(I2C_ADDRESS, CONTROL_REGISTER, 0x03)  
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(LED_PIN, GPIO.OUT)
+led_pwm = GPIO.PWM(LED_PIN, 100)
+led_pwm.start(0)
 
-def read_light_intensity():
-    light_data = bus.read_word_data(I2C_ADDRESS, DATA_REGISTER)
-    light_intensity = light_data / 1.2
-    return light_intensity
+brightness_levels = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]
 
-def categorize_light_intensity(intensity):
-    if intensity > 10000:
-        return "Too Bright"
-    elif intensity > 5000:
-        return "Bright"
-    elif intensity > 2000:
-        return "Medium"
-    elif intensity > 500:
-        return "Dark"
+while True:
+    GPIO.setup(TRIG_PIN, GPIO.OUT)
+    GPIO.setup(ECHO_PIN, GPIO.IN)
+
+    GPIO.output(TRIG_PIN, False)
+    time.sleep(0.2)
+    GPIO.output(TRIG_PIN, True)
+    time.sleep(0.00001)
+    GPIO.output(TRIG_PIN, False)
+
+    while GPIO.input(ECHO_PIN) == 0:
+        pulse_start_time = time.time()
+    while GPIO.input(ECHO_PIN) == 1:
+        pulse_end_time = time.time()
+
+    pulse_duration = pulse_end_time - pulse_start_time
+
+    distance = pulse_duration * 17150
+    distance = 2 * round(distance / 2)
+
+    if distance >= 0 and distance <= 20:
+        index = int((distance - 2) / 2)
+        led_pwm.ChangeDutyCycle(brightness_levels[index])
     else:
-        return "Too Dark"
+        led_pwm.ChangeDutyCycle(0)
 
-try:
-    while True:
-        intensity = read_light_intensity()
-        category = categorize_light_intensity(intensity)
-        print(f"Light Intensity: {intensity} lux - Category: {category}")
-        time.sleep(1)
-
-except KeyboardInterrupt:
-    print("Measurement stopped by the user.")
+    time.sleep(1)
