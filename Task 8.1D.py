@@ -1,43 +1,42 @@
-import RPi.GPIO as GPIO
+import smbus
 import time
 
-GPIO.setwarnings(False)
+DEVICE = 0x23
 
-TRIG_PIN = 21
-ECHO_PIN = 20
-LED_PIN = 4
+POWER_DOWN = 0x00
+POWER_ON = 0x01
+RESET = 0x07
+ONE_TIME_HIGH_RES_MODE_1 = 0x20
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(LED_PIN, GPIO.OUT)
-led_pwm = GPIO.PWM(LED_PIN, 100)
-led_pwm.start(0)
+bus = smbus.SMBus(1)
 
-brightness_levels = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]
+def convertToNumber(data):
+    result = (data[1] + (256 * data[0])) / 1.2
+    return result
 
-while True:
-    GPIO.setup(TRIG_PIN, GPIO.OUT)
-    GPIO.setup(ECHO_PIN, GPIO.IN)
-
-    GPIO.output(TRIG_PIN, False)
-    time.sleep(0.2)
-    GPIO.output(TRIG_PIN, True)
-    time.sleep(0.00001)
-    GPIO.output(TRIG_PIN, False)
-
-    while GPIO.input(ECHO_PIN) == 0:
-        pulse_start_time = time.time()
-    while GPIO.input(ECHO_PIN) == 1:
-        pulse_end_time = time.time()
-
-    pulse_duration = pulse_end_time - pulse_start_time
-
-    distance = pulse_duration * 17150
-    distance = 2 * round(distance / 2)
-
-    if distance >= 0 and distance <= 20:
-        index = int((distance - 2) / 2)
-        led_pwm.ChangeDutyCycle(brightness_levels[index])
+def categorizeLightLevel(light_level):
+    if light_level > 1000:
+        return "Too Bright"
+    elif light_level > 500:
+        return "Bright"
+    elif light_level > 100:
+        return "Medium"
+    elif light_level > 10:
+        return "Dark"
     else:
-        led_pwm.ChangeDutyCycle(0)
+        return "Too Dark"
 
-    time.sleep(1)
+def readLight(addr=DEVICE):
+    data = bus.read_i2c_block_data(addr, ONE_TIME_HIGH_RES_MODE_1)
+    light_level = convertToNumber(data)
+    return light_level
+
+def main():
+    while True:
+        light_level = readLight()
+        category = categorizeLightLevel(light_level)
+        print("Light Level : " + format(light_level, '.2f') + " lx (" + category + ")")
+        time.sleep(0.5)
+
+if __name__ == "__main__":
+    main()
